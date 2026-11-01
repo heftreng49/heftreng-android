@@ -39,6 +39,10 @@ import com.heftreng.app.navigation.Screen
 import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.NotificationsViewModel
+import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.tasks.await
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.concurrent.TimeUnit
 
 // ── Zaman yardımcıları ─────────────────────────────────────────────────────────
@@ -443,11 +447,56 @@ fun DailyNotifCard(
     onClick  : () -> Unit = {},
     language : String     = "tr",
 ) {
-    val ku         = language == "ku"
     val isQuote    = notif.type == "daily_quote"
     val accentColor = if (isQuote) Color(0xFF8B5CF6) else Color(0xFF0EA5E9)
     val timeText    = relativeTime(notif.ts, language)
     val isUnread    = !notif.read
+
+    // daily_word → Firestore'dan kelime listesini çek
+    data class WordRow(
+        val word: String, val meaningTr: String, val meaningKu: String,
+        val exampleKu: String, val exampleTr: String, val emoji: String,
+    )
+    var words by remember { mutableStateOf<List<WordRow>>(emptyList()) }
+    if (!isQuote) {
+        LaunchedEffect(notif.id) {
+            try {
+                val db   = FirebaseFirestore.getInstance()
+                val date = notif.ts?.let {
+                    SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(Date(it.seconds * 1000))
+                } ?: SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(Date())
+                var doc  = db.collection("daily_word").document(date).get().await()
+                if (!doc.exists()) {
+                    val all = db.collection("daily_word").get().await()
+                    doc = all.documents
+                        .filter { it.id.matches(Regex("""\d{4}-\d{2}-\d{2}""")) }
+                        .maxByOrNull { it.id } ?: return@LaunchedEffect
+                }
+                @Suppress("UNCHECKED_CAST")
+                val raw = doc.get("words") as? List<Map<String, String>> ?: return@LaunchedEffect
+                words = raw.map { m ->
+                    WordRow(
+                        word      = m["word"]       ?: "",
+                        meaningTr = m["meaning_tr"] ?: "",
+                        meaningKu = m["meaning_ku"] ?: "",
+                        exampleKu = m["example_ku"] ?: "",
+                        exampleTr = m["example_tr"] ?: "",
+                        emoji     = m["emoji"]      ?: "",
+                    )
+                }.filter { it.word.isNotBlank() }
+            } catch (_: Exception) {}
+        }
+    }
+
+    // Accent renkler — DailyWordScreen ile aynı palet
+    val cardBgColors = listOf(
+        Color(0xFFF0FAF0), Color(0xFFFFF8F0), Color(0xFFF3F0FA),
+        Color(0xFFEFF6FF), Color(0xFFFFF0F0),
+    )
+    val wordAccents = listOf(
+        Color(0xFF2E7D32), Color(0xFFE65100), Color(0xFF4527A0),
+        Color(0xFF1565C0), Color(0xFFC62828),
+    )
 
     Surface(
         onClick   = onClick,
@@ -486,7 +535,7 @@ fun DailyNotifCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         if (isQuote) notifT(language, "Günün Alıntısı", "Jêgirta Rojê", "Jêgirta Rocî", "کوتی ڕۆژ")
-                        else         notifT(language, "Günün Kelimesi", "Peyvа Rojê", "Peyva Rocî", "وشەی ڕۆژ"),
+                        else         notifT(language, "Günün Kelimeleri", "Peyvên Rojê", "Peyvên Rocî", "وشەکانی ڕۆژ"),
                         fontWeight = FontWeight.Bold,
                         color      = accentColor,
                         fontSize   = 13.sp,
@@ -507,19 +556,118 @@ fun DailyNotifCard(
                 }
             }
 
-            // Alıntı / Kelime içeriği — tüm metin gösterilir, kesilmez
-            if (notif.sub.isNotBlank()) {
-                Spacer(Modifier.height(10.dp))
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = accentColor.copy(alpha = 0.06f),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.Top,
+            Spacer(Modifier.height(10.dp))
+
+            // daily_word → mini kelime kartları
+            if (!isQuote) {
+                if (words.isEmpty()) {
+                    // Yüklenirken veya sub metni — placeholder
+                    if (notif.sub.isNotBlank()) {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = accentColor.copy(alpha = 0.06f),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(
+                                notif.sub,
+                                modifier   = Modifier.padding(10.dp),
+                                color      = OnBackground,
+                                fontSize   = 13.sp,
+                                lineHeight = 20.sp,
+                            )
+                        }
+                    } else {
+                        LinearProgressIndicator(
+                            modifier = Modifier.fillMaxWidth().height(2.dp),
+                            color    = accentColor,
+                        )
+                    }
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        words.forEachIndexed { i, w ->
+                            val bg     = cardBgColors[i % cardBgColors.size]
+                            val accent = wordAccents[i % wordAccents.size]
+                            Surface(
+                                shape  = RoundedCornerShape(12.dp),
+                                color  = bg,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Row(
+                                    modifier          = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    // Numara kutusu
+                                    Box(
+                                        modifier         = Modifier
+                                            .size(28.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(accent),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Text(
+                                            "${i + 1}",
+                                            color      = Color.White,
+                                            fontSize   = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                        )
+                                    }
+                                    Spacer(Modifier.width(8.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        ) {
+                                            Text(
+                                                w.word,
+                                                fontWeight = FontWeight.Bold,
+                                                color      = Color(0xFF1A1A2E),
+                                                fontSize   = 15.sp,
+                                            )
+                                            if (w.meaningTr.isNotBlank()) {
+                                                Text("—", color = accent, fontSize = 13.sp)
+                                                Text(
+                                                    w.meaningTr,
+                                                    color      = accent,
+                                                    fontSize   = 13.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    maxLines   = 1,
+                                                    overflow   = TextOverflow.Ellipsis,
+                                                    modifier   = Modifier.weight(1f),
+                                                )
+                                            }
+                                        }
+                                        if (w.exampleKu.isNotBlank()) {
+                                            Text(
+                                                "💬 ${w.exampleKu}",
+                                                color      = Color(0xFF1A1A2E).copy(alpha = 0.65f),
+                                                fontSize   = 12.sp,
+                                                fontStyle  = androidx.compose.ui.text.font.FontStyle.Italic,
+                                                lineHeight = 17.sp,
+                                                maxLines   = 1,
+                                                overflow   = TextOverflow.Ellipsis,
+                                            )
+                                        }
+                                    }
+                                    if (w.emoji.isNotBlank()) {
+                                        Text(w.emoji, fontSize = 20.sp, modifier = Modifier.padding(start = 4.dp))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                // daily_quote → mevcut alıntı gösterimi
+                if (notif.sub.isNotBlank()) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = accentColor.copy(alpha = 0.06f),
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
-                        if (isQuote) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.Top,
+                        ) {
                             Icon(
                                 Icons.Default.FormatQuote,
                                 null,
@@ -527,15 +675,14 @@ fun DailyNotifCard(
                                 modifier = Modifier.size(18.dp).padding(top = 2.dp),
                             )
                             Spacer(Modifier.width(6.dp))
+                            Text(
+                                notif.sub,
+                                color      = OnBackground,
+                                fontSize   = 14.sp,
+                                lineHeight = 21.sp,
+                                fontStyle  = androidx.compose.ui.text.font.FontStyle.Italic,
+                            )
                         }
-                        Text(
-                            notif.sub,
-                            color      = OnBackground,
-                            fontSize   = 14.sp,
-                            lineHeight = 21.sp,
-                            fontStyle  = if (isQuote) androidx.compose.ui.text.font.FontStyle.Italic
-                                         else         androidx.compose.ui.text.font.FontStyle.Normal,
-                        )
                     }
                 }
             }
