@@ -49,7 +49,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.debounce
 import androidx.compose.foundation.clickable
 import androidx.navigation.NavController
-import com.heftreng.app.ads.RemoteConfigManager
 import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.ads.AdPlacement
@@ -263,7 +262,6 @@ fun KurdiScreen(
 
     var selectedTab by remember { mutableStateOf(if (deepLinkGrammarId != null) 1 else 0) }
     // Oyunlar: Remote Config "kurdi_games_enabled" = true olunca görünür.
-    // Firebase konsolu → Remote Config → kurdi_games_enabled = true → Yayınla.
     val gamesEnabled = remember {
         com.google.firebase.remoteconfig.FirebaseRemoteConfig.getInstance()
             .runCatching { getBoolean(RemoteConfigManager.KEY_KURDI_GAMES_ENABLED) }

@@ -93,11 +93,7 @@ class RemoteConfigManager @Inject constructor(
         const val KEY_BANNER_PEOPLEHUB      = "banner_peoplehub"
         const val KEY_BANNER_CMSPAGE        = "banner_cmspage"
 
-        // ── Feature flag'lar ──────────────────────────────────────────
-        // Firebase konsolu: Remote Config → Parametre ekle
-        //   key: kurdi_games_enabled | Veri türü: Boolean | Değer: false
-        // Oyunlar sekmesini açmak için → true yapıp Yayınla (6 saatte gelir
-        // veya Admin Paneli → Reklamları Yenile ile anında).
+        // Feature flag — Firebase konsolu: Remote Config → kurdi_games_enabled = true → Yayınla
         const val KEY_KURDI_GAMES_ENABLED   = "kurdi_games_enabled"
 
         /**
@@ -163,8 +159,6 @@ class RemoteConfigManager @Inject constructor(
             KEY_NATIVE_NOTIFICATIONS to """{"enabled":false,"unitId":"","position":5,"frequency":5,"maxAds":3}""",
             // Kullanıcı listeleri (kısa listeler, düşük öncelik) → banner
             KEY_BANNER_PEOPLEHUB     to """{"enabled":false,"unitId":"","bannerSize":"adaptive","position":8,"frequency":8}""",
-
-            // Feature flag'lar — varsayılan kapalı
             KEY_KURDI_GAMES_ENABLED  to "false",
         )
     }
@@ -222,10 +216,6 @@ class RemoteConfigManager @Inject constructor(
     }.getOrDefault(false)
 
     // ── Config okuma yardımcıları ────────────────────────────────────────
-
-    /** Oyunlar sekmesi Remote Config flag'i — konsol'dan true yapınca sekme görünür. */
-    fun isKurdiGamesEnabled(): Boolean =
-        runCatching { remoteConfig.getBoolean(KEY_KURDI_GAMES_ENABLED) }.getOrDefault(false)
 
     /** Global reklam açık/kapalı flag'i */
     fun isAdsEnabled(): Boolean =
