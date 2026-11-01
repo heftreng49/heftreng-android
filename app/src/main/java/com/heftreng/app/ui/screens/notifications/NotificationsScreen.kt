@@ -311,6 +311,12 @@ fun NotificationsScreen(
                                 NotifItem(
                                     notif    = notif,
                                     language = language,
+                                    onShareDailyWord = if (notif.type == "daily_word") {{
+                                        val date = notif.ts?.let {
+                                            java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date(it.seconds * 1000))
+                                        } ?: ""
+                                        navController.navigate("daily_word/$date")
+                                    }} else null,
                                     onAcceptFollowRequest  = if (notif.type == "follow_request") {{ vm.acceptFollowRequest(notif.fromUid, notif.id) }} else null,
                                     onDeclineFollowRequest = if (notif.type == "follow_request") {{ vm.declineFollowRequest(notif.fromUid, notif.id) }} else null,
                                     onClick  = { handleNotifClick(notif, navController, vm) },
@@ -327,6 +333,12 @@ fun NotificationsScreen(
                                 NotifItem(
                                     notif    = notif,
                                     language = language,
+                                    onShareDailyWord = if (notif.type == "daily_word") {{
+                                        val date = notif.ts?.let {
+                                            java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date(it.seconds * 1000))
+                                        } ?: ""
+                                        navController.navigate("daily_word/$date")
+                                    }} else null,
                                     onAcceptFollowRequest  = if (notif.type == "follow_request") {{ vm.acceptFollowRequest(notif.fromUid, notif.id) }} else null,
                                     onDeclineFollowRequest = if (notif.type == "follow_request") {{ vm.declineFollowRequest(notif.fromUid, notif.id) }} else null,
                                     onClick  = { handleNotifClick(notif, navController, vm) },
@@ -343,6 +355,12 @@ fun NotificationsScreen(
                                 NotifItem(
                                     notif    = notif,
                                     language = language,
+                                    onShareDailyWord = if (notif.type == "daily_word") {{
+                                        val date = notif.ts?.let {
+                                            java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date(it.seconds * 1000))
+                                        } ?: ""
+                                        navController.navigate("daily_word/$date")
+                                    }} else null,
                                     onAcceptFollowRequest  = if (notif.type == "follow_request") {{ vm.acceptFollowRequest(notif.fromUid, notif.id) }} else null,
                                     onDeclineFollowRequest = if (notif.type == "follow_request") {{ vm.declineFollowRequest(notif.fromUid, notif.id) }} else null,
                                     onClick  = { handleNotifClick(notif, navController, vm) },
@@ -445,6 +463,7 @@ private fun NotifGroupHeader(label: String) {
 fun DailyNotifCard(
     notif    : Notification,
     onClick  : () -> Unit = {},
+    onShare  : (() -> Unit)? = null,
     language : String     = "tr",
 ) {
     val isQuote    = notif.type == "daily_quote"
@@ -546,13 +565,31 @@ fun DailyNotifCard(
                         Text(timeText, color = Muted, fontSize = 11.sp)
                     }
                 }
-                if (isUnread) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(accentColor),
-                    )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    if (!isQuote && onShare != null) {
+                        IconButton(
+                            onClick  = onShare,
+                            modifier = Modifier.size(32.dp),
+                        ) {
+                            Icon(
+                                Icons.Default.Share,
+                                contentDescription = "Paylaş",
+                                tint     = accentColor,
+                                modifier = Modifier.size(17.dp),
+                            )
+                        }
+                    }
+                    if (isUnread) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(accentColor),
+                        )
+                    }
                 }
             }
 
@@ -695,13 +732,19 @@ fun DailyNotifCard(
 fun NotifItem(
     notif                 : Notification,
     onClick               : () -> Unit = {},
+    onShareDailyWord      : (() -> Unit)? = null,
     language              : String     = "tr",
     onAcceptFollowRequest : (() -> Unit)? = null,
     onDeclineFollowRequest: (() -> Unit)? = null,
 ) {
     // Günün Alıntısı ve Günün Kelimesi → özel kart
     if (notif.type == "daily_quote" || notif.type == "daily_word") {
-        DailyNotifCard(notif = notif, onClick = onClick, language = language)
+        DailyNotifCard(
+            notif    = notif,
+            onClick  = onClick,
+            onShare  = if (notif.type == "daily_word") onShareDailyWord else null,
+            language = language,
+        )
         return
     }
 
