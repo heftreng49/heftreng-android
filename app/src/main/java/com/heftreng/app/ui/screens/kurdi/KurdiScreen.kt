@@ -49,6 +49,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.debounce
 import androidx.compose.foundation.clickable
 import androidx.navigation.NavController
+import com.heftreng.app.ads.RemoteConfigManager
 import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.ads.AdPlacement
@@ -261,13 +262,19 @@ fun KurdiScreen(
     }
 
     var selectedTab by remember { mutableStateOf(if (deepLinkGrammarId != null) 1 else 0) }
-    // YZ Ders sekmesi sadece admin'e görünür
+    // Oyunlar: Remote Config "kurdi_games_enabled" = true olunca görünür.
+    // Firebase konsolu → Remote Config → kurdi_games_enabled = true → Yayınla.
+    val gamesEnabled = remember {
+        com.google.firebase.remoteconfig.FirebaseRemoteConfig.getInstance()
+            .runCatching { getBoolean(RemoteConfigManager.KEY_KURDI_GAMES_ENABLED) }
+            .getOrDefault(false)
+    }
     val tabs = buildList {
         add(Strings.kurdiUnits(language))
         // add(Strings.kurdiDict(language))  // Ferheng — geçici olarak gizlendi
         add(Strings.kurdiGrammar(language))
         add(Strings.kurdiLeaderboard(language))
-        add(Strings.kurdiGames(language))
+        if (gamesEnabled) add(Strings.kurdiGames(language))
     }
 
     // ── Deep-link: feed'den gelen "dersi aç" isteği — dersler yüklenince tetiklenir ──
@@ -597,7 +604,7 @@ fun KurdiScreen(
                 )
             }
 
-            3 -> GamesTab(language = language, vm = vm)
+            3 -> if (gamesEnabled) GamesTab(language = language, vm = vm)
         }
     }
 
