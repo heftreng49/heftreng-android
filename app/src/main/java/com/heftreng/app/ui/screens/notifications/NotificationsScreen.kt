@@ -424,8 +424,13 @@ private fun handleNotifClick(
             // url varsa ve harici linkse açma — sadece in-app navigasyon
         }
         "daily_word" -> {
-            // Günlük kelime bildiriminde direkt DailyWord ekranına git
-            navController.navigate(Screen.DailyWord.route)
+            // Bildirimin tarihine ait kelime ekranına git
+            val date = notif.ts?.let {
+                java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                    .format(java.util.Date(it.seconds * 1000))
+            } ?: java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                .format(java.util.Date())
+            navController.navigate("daily_word/$date")
         }
         "daily_quote" -> {
             // Alıntı paylaşımına git — postId varsa
