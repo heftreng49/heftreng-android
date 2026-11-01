@@ -54,8 +54,10 @@ fun DailyWordScreen(
     val scope    = rememberCoroutineScope()
     val context  = LocalContext.current
 
-    // İlk yükleme
-    LaunchedEffect(requestedDate) {
+    // İlk yükleme — Unit key ile her composable oturumunda bir kez çalışır.
+    // requestedDate parametresi her zaman doğru tarihle gelir çünkü NavHost
+    // her farklı back-stack entry'si için yeni bir ViewModel oluşturur.
+    LaunchedEffect(Unit) {
         vm.loadWords(requestedDate)
     }
 

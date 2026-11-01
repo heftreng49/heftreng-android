@@ -41,7 +41,8 @@ class DailyWordViewModel @Inject constructor(
     private val _notFound = MutableStateFlow(false)
     val notFound = _notFound.asStateFlow()
 
-    init { loadWords() }
+    // init'te yükleme yok — DailyWordScreen'deki LaunchedEffect tetikler.
+    // Bu sayede bildirimden gelen requestedDate, init'in null yüklemesiyle çakışmaz.
 
     /**
      * Önce bugünün dokümanını dene; yoksa koleksiyondaki en son dokümanı getir.
