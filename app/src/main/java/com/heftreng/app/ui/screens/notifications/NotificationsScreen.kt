@@ -25,11 +25,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.core.content.FileProvider
+import com.heftreng.app.utils.DailyWordCardBitmap
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.FileOutputStream
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -162,7 +171,6 @@ fun NotificationsScreen(
     language: String = "tr",
 ) {
     val ku            = language == "ku"
-    val context       = LocalContext.current
     val notifications by vm.notifications.collectAsState()
     val loading       by vm.loading.collectAsState()
     val unreadCount   = notifications.count { !it.read }
@@ -314,24 +322,7 @@ fun NotificationsScreen(
                                 NotifItem(
                                     notif    = notif,
                                     language = language,
-                                    onShareDailyWord = if (notif.type == "daily_word") {{
-                                        val date = notif.ts?.let {
-                                            java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date(it.seconds * 1000))
-                                        } ?: java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
-                                        val shareText = if (language == "ku")
-                                            "Peyvên Rojê — $date\nhttps://heftreng.com/daily/$date"
-                                        else
-                                            "Günün Kelimeleri — $date\nhttps://heftreng.com/daily/$date"
-                                        context.startActivity(
-                                            Intent.createChooser(
-                                                Intent(Intent.ACTION_SEND).apply {
-                                                    type = "text/plain"
-                                                    putExtra(Intent.EXTRA_TEXT, shareText)
-                                                },
-                                                null
-                                            )
-                                        )
-                                    }} else null,
+                                    onShareDailyWord = null,
                                     onAcceptFollowRequest  = if (notif.type == "follow_request") {{ vm.acceptFollowRequest(notif.fromUid, notif.id) }} else null,
                                     onDeclineFollowRequest = if (notif.type == "follow_request") {{ vm.declineFollowRequest(notif.fromUid, notif.id) }} else null,
                                     onClick  = { handleNotifClick(notif, navController, vm) },
@@ -348,24 +339,7 @@ fun NotificationsScreen(
                                 NotifItem(
                                     notif    = notif,
                                     language = language,
-                                    onShareDailyWord = if (notif.type == "daily_word") {{
-                                        val date = notif.ts?.let {
-                                            java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date(it.seconds * 1000))
-                                        } ?: java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
-                                        val shareText = if (language == "ku")
-                                            "Peyvên Rojê — $date\nhttps://heftreng.com/daily/$date"
-                                        else
-                                            "Günün Kelimeleri — $date\nhttps://heftreng.com/daily/$date"
-                                        context.startActivity(
-                                            Intent.createChooser(
-                                                Intent(Intent.ACTION_SEND).apply {
-                                                    type = "text/plain"
-                                                    putExtra(Intent.EXTRA_TEXT, shareText)
-                                                },
-                                                null
-                                            )
-                                        )
-                                    }} else null,
+                                    onShareDailyWord = null,
                                     onAcceptFollowRequest  = if (notif.type == "follow_request") {{ vm.acceptFollowRequest(notif.fromUid, notif.id) }} else null,
                                     onDeclineFollowRequest = if (notif.type == "follow_request") {{ vm.declineFollowRequest(notif.fromUid, notif.id) }} else null,
                                     onClick  = { handleNotifClick(notif, navController, vm) },
@@ -382,24 +356,7 @@ fun NotificationsScreen(
                                 NotifItem(
                                     notif    = notif,
                                     language = language,
-                                    onShareDailyWord = if (notif.type == "daily_word") {{
-                                        val date = notif.ts?.let {
-                                            java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date(it.seconds * 1000))
-                                        } ?: java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
-                                        val shareText = if (language == "ku")
-                                            "Peyvên Rojê — $date\nhttps://heftreng.com/daily/$date"
-                                        else
-                                            "Günün Kelimeleri — $date\nhttps://heftreng.com/daily/$date"
-                                        context.startActivity(
-                                            Intent.createChooser(
-                                                Intent(Intent.ACTION_SEND).apply {
-                                                    type = "text/plain"
-                                                    putExtra(Intent.EXTRA_TEXT, shareText)
-                                                },
-                                                null
-                                            )
-                                        )
-                                    }} else null,
+                                    onShareDailyWord = null,
                                     onAcceptFollowRequest  = if (notif.type == "follow_request") {{ vm.acceptFollowRequest(notif.fromUid, notif.id) }} else null,
                                     onDeclineFollowRequest = if (notif.type == "follow_request") {{ vm.declineFollowRequest(notif.fromUid, notif.id) }} else null,
                                     onClick  = { handleNotifClick(notif, navController, vm) },
@@ -514,6 +471,8 @@ fun DailyNotifCard(
     val accentColor = if (isQuote) Color(0xFF8B5CF6) else Color(0xFF0EA5E9)
     val timeText    = relativeTime(notif.ts, language)
     val isUnread    = !notif.read
+    val shareContext = LocalContext.current
+    val shareScope   = rememberCoroutineScope()
 
     // daily_word → Firestore'dan kelime listesini çek
     data class WordRow(
@@ -613,9 +572,41 @@ fun DailyNotifCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    if (!isQuote && onShare != null) {
+                    if (!isQuote) {
                         IconButton(
-                            onClick  = onShare,
+                            onClick  = {
+                                shareScope.launch {
+                                    withContext(Dispatchers.IO) {
+                                        try {
+                                            val cardWords = words.map {
+                                                DailyWordCardBitmap.WordItem(
+                                                    word      = it.word,
+                                                    meaningTr = it.meaningTr,
+                                                    meaningKu = it.meaningKu,
+                                                    exampleKu = it.exampleKu,
+                                                    exampleTr = it.exampleTr,
+                                                    emoji     = it.emoji,
+                                                )
+                                            }
+                                            val bitmap = DailyWordCardBitmap.build(shareContext, cardWords, notifMode = false)
+                                                ?: return@withContext
+                                            val file = File(shareContext.cacheDir, "heftreng_words_${System.currentTimeMillis()}.png")
+                                            FileOutputStream(file).use { out -> bitmap.compress(Bitmap.CompressFormat.PNG, 95, out) }
+                                            val uri = FileProvider.getUriForFile(shareContext, "${shareContext.packageName}.provider", file)
+                                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                                type = "image/png"
+                                                putExtra(Intent.EXTRA_STREAM, uri)
+                                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                            }
+                                            withContext(Dispatchers.Main) {
+                                                shareContext.startActivity(Intent.createChooser(shareIntent, null))
+                                            }
+                                        } catch (e: Exception) {
+                                            android.util.Log.e("DailyNotifCard", "share error: ${e.message}")
+                                        }
+                                    }
+                                }
+                            },
                             modifier = Modifier.size(32.dp),
                         ) {
                             Icon(
