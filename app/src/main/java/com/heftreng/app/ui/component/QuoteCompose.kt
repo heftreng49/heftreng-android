@@ -23,7 +23,6 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.zIndex
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.heftreng.app.ui.theme.*
@@ -450,7 +449,11 @@ fun QuoteDialog(
 
             // ── Kitap adı + autocomplete ───────────────────────────────────
             item {
-                Box(modifier = Modifier.fillMaxWidth()) {
+                val bookFiltered = if (showBookDrop)
+                    bookSuggestions.filter { it.bookName.contains(book, ignoreCase = true) }
+                else emptyList()
+
+                Column(modifier = Modifier.fillMaxWidth()) {
                     OutlinedTextField(
                         value         = book,
                         onValueChange = {
@@ -471,49 +474,44 @@ fun QuoteDialog(
                             }
                         }} else null,
                     )
-                    if (showBookDrop) {
-                        val filtered = bookSuggestions.filter {
-                            it.bookName.contains(book, ignoreCase = true)
-                        }
-                        if (filtered.isNotEmpty()) {
-                            Surface(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 58.dp)   // TextField yüksekliğinin hemen altı
-                                    .zIndex(10f),           // diğer item'ların üzerinde render et
-                                shape          = RoundedCornerShape(10.dp),
-                                color          = HeftSurface,
-                                border         = androidx.compose.foundation.BorderStroke(1.dp, Divider),
-                                tonalElevation = 8.dp,
-                                shadowElevation = 8.dp,
-                            ) {
-                                LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
-                                    items(filtered) { s ->
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clickable {
-                                                    book           = s.bookName
-                                                    if (s.authorName.isNotBlank()) author = s.authorName
-                                                    coverImg       = s.coverImg
-                                                    showBookDrop   = false
-                                                    showAuthorDrop = false
-                                                }
-                                                .padding(horizontal = 14.dp, vertical = 10.dp),
-                                            verticalAlignment     = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                        ) {
-                                            Icon(Icons.Default.AutoStories, null, tint = Amber, modifier = Modifier.size(14.dp))
-                                            Column {
-                                                Text(s.bookName, color = OnBackground, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                                                if (s.authorName.isNotBlank())
-                                                    Text(s.authorName, color = Muted, fontSize = 11.sp)
+                    // Autocomplete — aynı item içinde, koşullu gizleme yok
+                    // (ayrı item olsaydı LazyColumn recompose'u IME'yi kapatırdı)
+                    if (bookFiltered.isNotEmpty()) {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp),
+                            shape          = RoundedCornerShape(10.dp),
+                            color          = HeftSurface,
+                            border         = androidx.compose.foundation.BorderStroke(1.dp, Divider),
+                            tonalElevation = 8.dp,
+                            shadowElevation = 8.dp,
+                        ) {
+                            Column {
+                                bookFiltered.forEach { s ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                book           = s.bookName
+                                                if (s.authorName.isNotBlank()) author = s.authorName
+                                                coverImg       = s.coverImg
+                                                showBookDrop   = false
+                                                showAuthorDrop = false
                                             }
-                                            Spacer(Modifier.weight(1f))
-                                            Text(Strings.quoteCountSuffix(language, s.count), color = Muted, fontSize = 10.sp)
+                                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                                        verticalAlignment     = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        Icon(Icons.Default.AutoStories, null, tint = Amber, modifier = Modifier.size(14.dp))
+                                        Column(Modifier.weight(1f)) {
+                                            Text(s.bookName, color = OnBackground, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                            if (s.authorName.isNotBlank())
+                                                Text(s.authorName, color = Muted, fontSize = 11.sp)
                                         }
-                                        HorizontalDivider(color = Divider, thickness = 0.5.dp)
+                                        Text(Strings.quoteCountSuffix(language, s.count), color = Muted, fontSize = 10.sp)
                                     }
+                                    HorizontalDivider(color = Divider, thickness = 0.5.dp)
                                 }
                             }
                         }
@@ -548,7 +546,11 @@ fun QuoteDialog(
 
             // ── Yazar + autocomplete ───────────────────────────────────────
             item {
-                Box(modifier = Modifier.fillMaxWidth()) {
+                val authorFiltered = if (showAuthorDrop)
+                    authorSuggestions.filter { it.authorName.contains(author, ignoreCase = true) }.take(8)
+                else emptyList()
+
+                Column(modifier = Modifier.fillMaxWidth()) {
                     OutlinedTextField(
                         value         = author,
                         onValueChange = {
@@ -569,48 +571,43 @@ fun QuoteDialog(
                             }
                         }} else null,
                     )
-                    if (showAuthorDrop) {
-                        val filtered = authorSuggestions.filter {
-                            it.authorName.contains(author, ignoreCase = true)
-                        }.take(8)
-                        if (filtered.isNotEmpty()) {
-                            Surface(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 58.dp)   // TextField yüksekliğinin hemen altı
-                                    .zIndex(10f),           // diğer item'ların üzerinde render et
-                                shape          = RoundedCornerShape(10.dp),
-                                color          = HeftSurface,
-                                border         = androidx.compose.foundation.BorderStroke(1.dp, Divider),
-                                tonalElevation = 8.dp,
-                                shadowElevation = 8.dp,
-                            ) {
-                                LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
-                                    items(filtered) { s ->
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clickable {
-                                                    author = s.authorName
-                                                    if (book.isBlank() && s.bookName.isNotBlank())
-                                                        book = s.bookName
-                                                    showAuthorDrop = false
-                                                    showBookDrop   = false
-                                                }
-                                                .padding(horizontal = 14.dp, vertical = 10.dp),
-                                            verticalAlignment     = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                        ) {
-                                            Icon(Icons.Default.Person, null, tint = Primary, modifier = Modifier.size(14.dp))
-                                            Column(Modifier.weight(1f)) {
-                                                Text(s.authorName, color = OnBackground, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                                                if (s.bookName.isNotBlank())
-                                                    Text(s.bookName, color = Muted, fontSize = 11.sp)
+                    // Autocomplete — aynı item içinde, koşullu gizleme yok
+                    if (authorFiltered.isNotEmpty()) {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp),
+                            shape          = RoundedCornerShape(10.dp),
+                            color          = HeftSurface,
+                            border         = androidx.compose.foundation.BorderStroke(1.dp, Divider),
+                            tonalElevation = 8.dp,
+                            shadowElevation = 8.dp,
+                        ) {
+                            Column {
+                                authorFiltered.forEach { s ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                author = s.authorName
+                                                if (book.isBlank() && s.bookName.isNotBlank())
+                                                    book = s.bookName
+                                                showAuthorDrop = false
+                                                showBookDrop   = false
                                             }
-                                            Text(Strings.quoteCountSuffix(language, s.count), color = Muted, fontSize = 10.sp)
+                                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                                        verticalAlignment     = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        Icon(Icons.Default.Person, null, tint = Primary, modifier = Modifier.size(14.dp))
+                                        Column(Modifier.weight(1f)) {
+                                            Text(s.authorName, color = OnBackground, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                            if (s.bookName.isNotBlank())
+                                                Text(s.bookName, color = Muted, fontSize = 11.sp)
                                         }
-                                        HorizontalDivider(color = Divider, thickness = 0.5.dp)
+                                        Text(Strings.quoteCountSuffix(language, s.count), color = Muted, fontSize = 10.sp)
                                     }
+                                    HorizontalDivider(color = Divider, thickness = 0.5.dp)
                                 }
                             }
                         }
