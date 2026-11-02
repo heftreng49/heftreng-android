@@ -25,8 +25,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import android.content.Intent
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -160,6 +162,7 @@ fun NotificationsScreen(
     language: String = "tr",
 ) {
     val ku            = language == "ku"
+    val context       = LocalContext.current
     val notifications by vm.notifications.collectAsState()
     val loading       by vm.loading.collectAsState()
     val unreadCount   = notifications.count { !it.read }
@@ -314,8 +317,20 @@ fun NotificationsScreen(
                                     onShareDailyWord = if (notif.type == "daily_word") {{
                                         val date = notif.ts?.let {
                                             java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date(it.seconds * 1000))
-                                        } ?: ""
-                                        navController.navigate("daily_word/$date")
+                                        } ?: java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
+                                        val shareText = if (language == "ku")
+                                            "Peyvên Rojê — $date\nhttps://heftreng.com/daily/$date"
+                                        else
+                                            "Günün Kelimeleri — $date\nhttps://heftreng.com/daily/$date"
+                                        context.startActivity(
+                                            Intent.createChooser(
+                                                Intent(Intent.ACTION_SEND).apply {
+                                                    type = "text/plain"
+                                                    putExtra(Intent.EXTRA_TEXT, shareText)
+                                                },
+                                                null
+                                            )
+                                        )
                                     }} else null,
                                     onAcceptFollowRequest  = if (notif.type == "follow_request") {{ vm.acceptFollowRequest(notif.fromUid, notif.id) }} else null,
                                     onDeclineFollowRequest = if (notif.type == "follow_request") {{ vm.declineFollowRequest(notif.fromUid, notif.id) }} else null,
@@ -336,8 +351,20 @@ fun NotificationsScreen(
                                     onShareDailyWord = if (notif.type == "daily_word") {{
                                         val date = notif.ts?.let {
                                             java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date(it.seconds * 1000))
-                                        } ?: ""
-                                        navController.navigate("daily_word/$date")
+                                        } ?: java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
+                                        val shareText = if (language == "ku")
+                                            "Peyvên Rojê — $date\nhttps://heftreng.com/daily/$date"
+                                        else
+                                            "Günün Kelimeleri — $date\nhttps://heftreng.com/daily/$date"
+                                        context.startActivity(
+                                            Intent.createChooser(
+                                                Intent(Intent.ACTION_SEND).apply {
+                                                    type = "text/plain"
+                                                    putExtra(Intent.EXTRA_TEXT, shareText)
+                                                },
+                                                null
+                                            )
+                                        )
                                     }} else null,
                                     onAcceptFollowRequest  = if (notif.type == "follow_request") {{ vm.acceptFollowRequest(notif.fromUid, notif.id) }} else null,
                                     onDeclineFollowRequest = if (notif.type == "follow_request") {{ vm.declineFollowRequest(notif.fromUid, notif.id) }} else null,
@@ -358,8 +385,20 @@ fun NotificationsScreen(
                                     onShareDailyWord = if (notif.type == "daily_word") {{
                                         val date = notif.ts?.let {
                                             java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date(it.seconds * 1000))
-                                        } ?: ""
-                                        navController.navigate("daily_word/$date")
+                                        } ?: java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
+                                        val shareText = if (language == "ku")
+                                            "Peyvên Rojê — $date\nhttps://heftreng.com/daily/$date"
+                                        else
+                                            "Günün Kelimeleri — $date\nhttps://heftreng.com/daily/$date"
+                                        context.startActivity(
+                                            Intent.createChooser(
+                                                Intent(Intent.ACTION_SEND).apply {
+                                                    type = "text/plain"
+                                                    putExtra(Intent.EXTRA_TEXT, shareText)
+                                                },
+                                                null
+                                            )
+                                        )
                                     }} else null,
                                     onAcceptFollowRequest  = if (notif.type == "follow_request") {{ vm.acceptFollowRequest(notif.fromUid, notif.id) }} else null,
                                     onDeclineFollowRequest = if (notif.type == "follow_request") {{ vm.declineFollowRequest(notif.fromUid, notif.id) }} else null,
