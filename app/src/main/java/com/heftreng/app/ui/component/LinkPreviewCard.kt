@@ -23,7 +23,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import com.heftreng.app.R
 import com.heftreng.app.ui.theme.*
 
 /**
@@ -31,77 +30,6 @@ import com.heftreng.app.ui.theme.*
  * WebView embed YouTube tarafından engelleniyor (hata 152-4) — bu yüzden
  * in-app oynatma yerine dışa yönlendirme kullanıyoruz.
  */
-@Composable
-fun YouTubeEmbedCard(videoId: String, modifier: Modifier = Modifier) {
-    val context = LocalContext.current
-    val thumbnailUrl = "https://img.youtube.com/vi/$videoId/hqdefault.jpg"
-    val youtubeUrl   = "https://www.youtube.com/watch?v=$videoId"
-
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .aspectRatio(16f / 9f)
-            .clip(RoundedCornerShape(12.dp))
-            .clickable {
-                // Önce YouTube uygulamasını dene, yoksa tarayıcıya aç
-                val appIntent = Intent(Intent.ACTION_VIEW, Uri.parse("vnd.youtube:$videoId"))
-                val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse(youtubeUrl))
-                try {
-                    context.startActivity(appIntent)
-                } catch (e: Exception) {
-                    context.startActivity(webIntent)
-                }
-            }
-    ) {
-        // Thumbnail
-        AsyncImage(
-            model              = thumbnailUrl,
-            contentDescription = "YouTube video",
-            modifier           = Modifier.fillMaxSize(),
-            contentScale       = ContentScale.Crop,
-        )
-
-        // Karartma overlay
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.3f))
-        )
-
-        // Play butonu ortada
-        Box(
-            modifier = Modifier
-                .size(56.dp)
-                .align(Alignment.Center)
-                .background(Color.Red, CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                painter           = painterResource(R.drawable.ic_play),
-                contentDescription = "Oynat",
-                tint              = Color.White,
-                modifier          = Modifier.size(28.dp).offset(x = 2.dp),
-            )
-        }
-
-        // YouTube logosu sağ alt
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(8.dp)
-                .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
-                .padding(horizontal = 6.dp, vertical = 2.dp)
-        ) {
-            Text(
-                "▶ YouTube'da izle",
-                fontSize  = 10.sp,
-                color     = Color.White,
-                fontWeight = FontWeight.Medium,
-            )
-        }
-    }
-}
-
 @Composable
 fun LinkPreviewCard(
     url       : String,
@@ -115,7 +43,7 @@ fun LinkPreviewCard(
     val context = LocalContext.current
 
     if (type == "youtube" && youtubeId.isNotBlank()) {
-        YouTubeEmbedCard(videoId = youtubeId, modifier = modifier)
+        YouTubePlayerCard(videoId = youtubeId, modifier = modifier)
         return
     }
 
