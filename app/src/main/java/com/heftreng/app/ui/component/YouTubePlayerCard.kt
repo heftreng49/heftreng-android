@@ -127,9 +127,9 @@ private fun YoutubeFullscreenPlayer(
         }
     }
 
-    // embed URL — loadUrl direkt çalışır, loadDataWithBaseURL bazı cihazlarda boş kalıyor
+    // embed URL — origin parametresi Hata 153'ü önler
     val embedUrl = "https://www.youtube.com/embed/$videoId" +
-        "?autoplay=1&playsinline=1&rel=0&modestbranding=1"
+        "?autoplay=1&playsinline=1&rel=0&modestbranding=1&origin=https://www.youtube.com"
 
     Dialog(
         onDismissRequest = onClose,
@@ -162,6 +162,8 @@ private fun YoutubeFullscreenPlayer(
                             cacheMode                        = WebSettings.LOAD_DEFAULT
                             allowContentAccess               = true
                             mixedContentMode                 = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                            // Chrome UA — varsayılan Android WebView UA'sı Hata 153'e yol açıyor
+                            userAgentString = "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
                         }
                         webChromeClient = object : WebChromeClient() {
                             override fun onShowCustomView(
