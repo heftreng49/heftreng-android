@@ -114,22 +114,41 @@ private fun YoutubeFullscreenPlayer(
     videoId : String,
     onClose : () -> Unit,
 ) {
-    var customView by remember { mutableStateOf<View?>(null) }
+    var customView     by remember { mutableStateOf<View?>(null) }
     var customCallback by remember { mutableStateOf<WebChromeClient.CustomViewCallback?>(null) }
 
     BackHandler {
         if (customView != null) {
             customCallback?.onCustomViewHidden()
-            customView = null
+            customView     = null
             customCallback = null
         } else {
             onClose()
         }
     }
 
-    // embed URL — origin parametresi Hata 153'ü önler
-    val embedUrl = "https://www.youtube.com/embed/$videoId" +
-        "?autoplay=1&playsinline=1&rel=0&modestbranding=1&origin=https://www.youtube.com"
+    // loadDataWithBaseURL kullanıyoruz — baseUrl=https://www.youtube.com
+    // olunca tarayıcı origin'i YouTube olarak görüyor, Hata 153 ortadan kalkıyor
+    val html = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <style>
+                * { margin:0; padding:0; box-sizing:border-box; }
+                body { background:#000; width:100vw; height:100vh; overflow:hidden; }
+                iframe { width:100%; height:100%; border:none; display:block; }
+            </style>
+        </head>
+        <body>
+            <iframe
+                src="https://www.youtube.com/embed/$videoId?autoplay=1&playsinline=1&rel=0&modestbranding=1"
+                allow="autoplay; fullscreen; encrypted-media"
+                allowfullscreen>
+            </iframe>
+        </body>
+        </html>
+    """.trimIndent()
 
     Dialog(
         onDismissRequest = onClose,
@@ -144,7 +163,6 @@ private fun YoutubeFullscreenPlayer(
                 .fillMaxHeight(0.95f)
                 .background(Color.Black)
         ) {
-            // WebView — fillMaxSize ile kesinlikle boyutlanır
             AndroidView(
                 modifier = Modifier.fillMaxSize(),
                 factory  = { ctx ->
@@ -162,8 +180,6 @@ private fun YoutubeFullscreenPlayer(
                             cacheMode                        = WebSettings.LOAD_DEFAULT
                             allowContentAccess               = true
                             mixedContentMode                 = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                            // Chrome UA — varsayılan Android WebView UA'sı Hata 153'e yol açıyor
-                            userAgentString = "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
                         }
                         webChromeClient = object : WebChromeClient() {
                             override fun onShowCustomView(
@@ -183,22 +199,26 @@ private fun YoutubeFullscreenPlayer(
                                 view: WebView, request: WebResourceRequest
                             ): Boolean {
                                 val url = request.url.toString()
-                                // Sadece YouTube ve Google URL'lerini WebView içinde tut
                                 val isYt = url.contains("youtube.com") ||
                                            url.contains("youtu.be") ||
                                            url.contains("google.com") ||
                                            url.contains("ytimg.com")
                                 return if (!isYt) {
                                     try {
-                                        ctx.startActivity(
-                                            Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                                        )
+                                        ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
                                     } catch (_: Exception) {}
                                     true
                                 } else false
                             }
                         }
-                        loadUrl(embedUrl)
+                        // loadUrl yerine loadDataWithBaseURL — origin sorunu bu şekilde çözülüyor
+                        loadDataWithBaseURL(
+                            "https://www.youtube.com",
+                            html,
+                            "text/html",
+                            "utf-8",
+                            null,
+                        )
                     }
                 },
             )
