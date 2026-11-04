@@ -1,15 +1,11 @@
 package com.heftreng.app.ui.component
 
 import android.annotation.SuppressLint
-import android.app.Activity
 import android.content.Intent
-import android.content.pm.ActivityInfo
 import android.net.Uri
 import android.view.View
-import android.view.ViewGroup
 import android.webkit.*
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -35,18 +31,6 @@ import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import com.heftreng.app.R
 
-/**
- * YouTube video kartı.
- *
- * İki mod:
- *  - Thumbnail + Oynat butonu → tıklanınca tam ekran dialog içinde WebView oynatır
- *  - Sağ alt "YouTube'da izle" → YouTube uygulamasına / tarayıcıya yönlendirir
- *
- * Tam ekran desteği:
- *  Dialog içindeki WebView yatay yön zorlamaz; bunun yerine Activity'den
- *  bağımsız tam ekran dialog kullanılır ve WebChromeClient.onShowCustomView
- *  ile custom view üst üste koyulur.
- */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun YouTubePlayerCard(
@@ -73,7 +57,7 @@ fun YouTubePlayerCard(
         )
         Box(Modifier.fillMaxSize().background(Color.Black.copy(0.25f)))
 
-        // Oynat
+        // Oynat butonu
         Box(
             modifier = Modifier
                 .size(62.dp)
@@ -91,7 +75,7 @@ fun YouTubePlayerCard(
             )
         }
 
-        // YouTube'da izle
+        // YouTube'da izle — fallback
         Box(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
@@ -115,11 +99,11 @@ fun YouTubePlayerCard(
         }
     }
 
-    // ── Tam ekran oynatıcı (Dialog) ──────────────────────────────────────────
+    // ── Tam ekran oynatıcı ───────────────────────────────────────────────────
     if (showPlayer) {
         YoutubeFullscreenPlayer(
-            videoId  = videoId,
-            onClose  = { showPlayer = false },
+            videoId = videoId,
+            onClose = { showPlayer = false },
         )
     }
 }
@@ -130,33 +114,45 @@ private fun YoutubeFullscreenPlayer(
     videoId : String,
     onClose : () -> Unit,
 ) {
-    val context = LocalContext.current
-    // custom view (WebChromeClient tam ekran)
     var customView by remember { mutableStateOf<View?>(null) }
     var customCallback by remember { mutableStateOf<WebChromeClient.CustomViewCallback?>(null) }
 
-    BackHandler { onClose() }
+    BackHandler {
+        if (customView != null) {
+            customCallback?.onCustomViewHidden()
+            customView = null
+            customCallback = null
+        } else {
+            onClose()
+        }
+    }
+
+    // embed URL — loadUrl direkt çalışır, loadDataWithBaseURL bazı cihazlarda boş kalıyor
+    val embedUrl = "https://www.youtube.com/embed/$videoId" +
+        "?autoplay=1&playsinline=1&rel=0&modestbranding=1"
 
     Dialog(
         onDismissRequest = onClose,
-        properties       = DialogProperties(
+        properties = DialogProperties(
             usePlatformDefaultWidth = false,
             dismissOnClickOutside   = false,
         ),
     ) {
         Box(
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
+                .fillMaxHeight(0.95f)
                 .background(Color.Black)
         ) {
-            // WebView oynatıcı
+            // WebView — fillMaxSize ile kesinlikle boyutlanır
             AndroidView(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(16f / 9f)
-                    .align(Alignment.Center),
+                modifier = Modifier.fillMaxSize(),
                 factory  = { ctx ->
                     WebView(ctx).apply {
+                        layoutParams = android.view.ViewGroup.LayoutParams(
+                            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                        )
                         settings.apply {
                             javaScriptEnabled                = true
                             domStorageEnabled                = true
@@ -165,22 +161,19 @@ private fun YoutubeFullscreenPlayer(
                             useWideViewPort                  = true
                             cacheMode                        = WebSettings.LOAD_DEFAULT
                             allowContentAccess               = true
-                            allowFileAccess                  = false
+                            mixedContentMode                 = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                         }
                         webChromeClient = object : WebChromeClient() {
-                            override fun onShowCustomView(view: View, callback: CustomViewCallback) {
+                            override fun onShowCustomView(
+                                view: View, callback: CustomViewCallback
+                            ) {
                                 customView     = view
                                 customCallback = callback
-                                // Yatay yön
-                                (ctx as? Activity)?.requestedOrientation =
-                                    ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
                             }
                             override fun onHideCustomView() {
                                 customCallback?.onCustomViewHidden()
                                 customView     = null
                                 customCallback = null
-                                (ctx as? Activity)?.requestedOrientation =
-                                    ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
                             }
                         }
                         webViewClient = object : WebViewClient() {
@@ -188,38 +181,33 @@ private fun YoutubeFullscreenPlayer(
                                 view: WebView, request: WebResourceRequest
                             ): Boolean {
                                 val url = request.url.toString()
-                                return if (!url.contains("youtube") && !url.contains("youtu.be")) {
-                                    ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                // Sadece YouTube ve Google URL'lerini WebView içinde tut
+                                val isYt = url.contains("youtube.com") ||
+                                           url.contains("youtu.be") ||
+                                           url.contains("google.com") ||
+                                           url.contains("ytimg.com")
+                                return if (!isYt) {
+                                    try {
+                                        ctx.startActivity(
+                                            Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                        )
+                                    } catch (_: Exception) {}
                                     true
                                 } else false
                             }
                         }
-                        // Kendi domain'imiz yerine youtube.com origin'i — embed kısıtlamaları kalkar
-                        loadDataWithBaseURL(
-                            "https://www.youtube.com",
-                            """<!DOCTYPE html>
-<html>
-<head>
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<style>*{margin:0;padding:0;background:#000}
-iframe{position:absolute;top:0;left:0;width:100%;height:100%}
-</style>
-</head>
-<body>
-<iframe
-  src="https://www.youtube.com/embed/$videoId?autoplay=1&playsinline=1&rel=0&modestbranding=1&enablejsapi=1"
-  allow="autoplay;fullscreen;accelerometer;gyroscope;picture-in-picture"
-  allowfullscreen>
-</iframe>
-</body>
-</html>""",
-                            "text/html",
-                            "utf-8",
-                            null,
-                        )
+                        loadUrl(embedUrl)
                     }
                 },
             )
+
+            // WebChromeClient custom view (tam ekran)
+            customView?.let { cv ->
+                AndroidView(
+                    factory  = { cv },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
 
             // Kapat butonu
             IconButton(
@@ -228,17 +216,9 @@ iframe{position:absolute;top:0;left:0;width:100%;height:100%}
                     .align(Alignment.TopEnd)
                     .padding(8.dp)
                     .size(40.dp)
-                    .background(Color.Black.copy(0.55f), CircleShape),
+                    .background(Color.Black.copy(0.6f), CircleShape),
             ) {
                 Icon(Icons.Default.Close, "Kapat", tint = Color.White)
-            }
-
-            // WebChromeClient tam ekran custom view
-            customView?.let { cv ->
-                AndroidView(
-                    factory  = { cv },
-                    modifier = Modifier.fillMaxSize(),
-                )
             }
         }
     }
