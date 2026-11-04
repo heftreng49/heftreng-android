@@ -75,7 +75,7 @@ fun YouTubePlayerCard(
             )
         }
 
-        // YouTube'da izle — fallback
+        // YouTube uygulamasında aç — fallback
         Box(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
@@ -127,25 +127,47 @@ private fun YoutubeFullscreenPlayer(
         }
     }
 
-    // loadDataWithBaseURL kullanıyoruz — baseUrl=https://www.youtube.com
-    // olunca tarayıcı origin'i YouTube olarak görüyor, Hata 153 ortadan kalkıyor
+    // YouTube IFrame Player API — Hata 153'ün kesin çözümü.
+    // embed URL direkt açmak yerine YouTube'un kendi JS API'si kullanılıyor.
+    // origin parametresi "https://www.youtube.com" olarak veriliyor,
+    // loadDataWithBaseURL da aynı URL ile çağrılıyor; böylece WebView'ın
+    // origin'i YouTube sunucusuna güvenilir görünüyor.
     val html = """
         <!DOCTYPE html>
         <html>
         <head>
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-            <style>
-                * { margin:0; padding:0; box-sizing:border-box; }
-                body { background:#000; width:100vw; height:100vh; overflow:hidden; }
-                iframe { width:100%; height:100%; border:none; display:block; }
-            </style>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+        <style>
+          * { margin:0; padding:0; box-sizing:border-box; background:#000; }
+          html, body { width:100%; height:100%; overflow:hidden; }
+          #player { width:100%; height:100%; }
+        </style>
         </head>
         <body>
-            <iframe
-                src="https://www.youtube.com/embed/$videoId?autoplay=1&playsinline=1&rel=0&modestbranding=1"
-                allow="autoplay; fullscreen; encrypted-media"
-                allowfullscreen>
-            </iframe>
+        <div id="player"></div>
+        <script>
+          var tag = document.createElement('script');
+          tag.src = "https://www.youtube.com/iframe_api";
+          var firstScriptTag = document.getElementsByTagName('script')[0];
+          firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+          var player;
+          function onYouTubeIframeAPIReady() {
+            player = new YT.Player('player', {
+              videoId: '$videoId',
+              playerVars: {
+                autoplay: 1,
+                playsinline: 1,
+                rel: 0,
+                modestbranding: 1,
+                origin: 'https://www.youtube.com'
+              },
+              events: {
+                onReady: function(e) { e.target.playVideo(); }
+              }
+            });
+          }
+        </script>
         </body>
         </html>
     """.trimIndent()
@@ -202,7 +224,8 @@ private fun YoutubeFullscreenPlayer(
                                 val isYt = url.contains("youtube.com") ||
                                            url.contains("youtu.be") ||
                                            url.contains("google.com") ||
-                                           url.contains("ytimg.com")
+                                           url.contains("ytimg.com") ||
+                                           url.contains("googlevideo.com")
                                 return if (!isYt) {
                                     try {
                                         ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
@@ -211,7 +234,7 @@ private fun YoutubeFullscreenPlayer(
                                 } else false
                             }
                         }
-                        // loadUrl yerine loadDataWithBaseURL — origin sorunu bu şekilde çözülüyor
+                        // baseUrl = youtube.com → WebView origin'i YouTube olarak görüyor
                         loadDataWithBaseURL(
                             "https://www.youtube.com",
                             html,
