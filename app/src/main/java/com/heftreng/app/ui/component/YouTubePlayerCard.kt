@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.YouTubePlayer
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.AbstractYouTubePlayerListener
+import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.options.IFramePlayerOptions
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView
 
 @Composable
@@ -27,48 +28,45 @@ fun YouTubePlayerCard(
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val context   = LocalContext.current
 
-    Box(
+    AndroidView(
         modifier = modifier
             .fillMaxWidth()
             .aspectRatio(16f / 9f)
             .clip(RoundedCornerShape(12.dp))
-            .background(Color.Black)
-    ) {
-        AndroidView(
-            modifier = Modifier.fillMaxSize(),
-            factory  = { ctx ->
-                YouTubePlayerView(ctx).apply {
-                    // Lifecycle'a bağla — bellek sızıntısı olmaz
-                    lifecycle.addObserver(this)
+            .background(Color.Black),
+        factory  = { ctx ->
+            YouTubePlayerView(ctx).apply {
+                enableAutomaticInitialization = false
 
-                    addYouTubePlayerListener(object : AbstractYouTubePlayerListener() {
-                        override fun onReady(youTubePlayer: YouTubePlayer) {
-                            // cueVideo: yükler ama otomatik başlatmaz, kullanıcı basınca oynar
-                            youTubePlayer.cueVideo(videoId, 0f)
-                        }
+                val options = IFramePlayerOptions.Builder()
+                    .controls(1)
+                    .rel(0)
+                    .build()
 
-                        override fun onError(
-                            youTubePlayer: YouTubePlayer,
-                            error: com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants.PlayerError,
-                        ) {
-                            // Oynatılamayan videolarda YouTube uygulamasına aç
-                            try {
-                                ctx.startActivity(
-                                    Intent(Intent.ACTION_VIEW, Uri.parse("vnd.youtube:$videoId"))
-                                        .apply { setPackage("com.google.android.youtube") }
-                                )
-                            } catch (_: Exception) {
-                                ctx.startActivity(
-                                    Intent(Intent.ACTION_VIEW, Uri.parse("https://youtu.be/$videoId"))
-                                )
-                            }
+                lifecycle.addObserver(this)
+
+                initialize(object : AbstractYouTubePlayerListener() {
+                    override fun onReady(youTubePlayer: YouTubePlayer) {
+                        youTubePlayer.cueVideo(videoId, 0f)
+                    }
+                    override fun onError(
+                        youTubePlayer: YouTubePlayer,
+                        error: com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants.PlayerError,
+                    ) {
+                        try {
+                            ctx.startActivity(
+                                Intent(Intent.ACTION_VIEW, Uri.parse("vnd.youtube:$videoId"))
+                                    .apply { setPackage("com.google.android.youtube") }
+                            )
+                        } catch (_: Exception) {
+                            ctx.startActivity(
+                                Intent(Intent.ACTION_VIEW, Uri.parse("https://youtu.be/$videoId"))
+                            )
                         }
-                    })
-                }
-            },
-            onRelease = { view ->
-                view.release()
-            },
-        )
-    }
+                    }
+                }, options)
+            }
+        },
+        onRelease = { it.release() },
+    )
 }
