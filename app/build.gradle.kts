@@ -188,4 +188,6 @@ dependencies {
     implementation("io.noties.markwon:ext-strikethrough:4.6.2")
     implementation("io.noties.markwon:ext-tables:4.6.2")
     implementation("io.noties.markwon:linkify:4.6.2")
+    implementation("androidx.browser:browser:1.8.0")
+    implementation("com.pierfrancescosoffritti.androidyoutubeplayer:core:12.1.1")
 }
