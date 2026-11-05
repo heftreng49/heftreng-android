@@ -43,12 +43,10 @@ fun YouTubePlayerCard(
             .clip(RoundedCornerShape(12.dp))
     ) {
         if (showPlayer) {
-            // ── Inline WebView oynatıcı ──────────────────────────────────────
             InlineYouTubePlayer(
-                videoId = videoId,
+                videoId  = videoId,
                 modifier = Modifier.fillMaxSize(),
-                onError = {
-                    // embed izni yoksa YouTube uygulamasına aç
+                onFallback = {
                     showPlayer = false
                     try {
                         context.startActivity(
@@ -63,7 +61,6 @@ fun YouTubePlayerCard(
                 },
             )
         } else {
-            // ── Thumbnail ────────────────────────────────────────────────────
             AsyncImage(
                 model              = "https://img.youtube.com/vi/$videoId/hqdefault.jpg",
                 contentDescription = "YouTube video",
@@ -72,7 +69,6 @@ fun YouTubePlayerCard(
             )
             Box(Modifier.fillMaxSize().background(Color.Black.copy(0.25f)))
 
-            // Oynat butonu
             Box(
                 modifier = Modifier
                     .size(62.dp)
@@ -90,7 +86,6 @@ fun YouTubePlayerCard(
                 )
             }
 
-            // YouTube'da izle etiketi
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
@@ -119,51 +114,13 @@ fun YouTubePlayerCard(
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 private fun InlineYouTubePlayer(
-    videoId  : String,
-    modifier : Modifier = Modifier,
-    onError  : () -> Unit,
+    videoId    : String,
+    modifier   : Modifier = Modifier,
+    onFallback : () -> Unit,
 ) {
-    val html = """
-        <!DOCTYPE html>
-        <html>
-        <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-        <style>
-          * { margin:0; padding:0; box-sizing:border-box; background:#000; }
-          html, body { width:100%; height:100%; overflow:hidden; }
-          #player { width:100%; height:100%; }
-        </style>
-        </head>
-        <body>
-        <div id="player"></div>
-        <script>
-          var tag = document.createElement('script');
-          tag.src = "https://www.youtube.com/iframe_api";
-          document.head.appendChild(tag);
-          function onYouTubeIframeAPIReady() {
-            new YT.Player('player', {
-              videoId: '$videoId',
-              playerVars: {
-                autoplay: 1,
-                playsinline: 1,
-                rel: 0,
-                modestbranding: 1,
-                origin: 'https://www.youtube.com'
-              },
-              events: {
-                onReady: function(e) { e.target.playVideo(); },
-                onError: function(e) {
-                  if (e.data === 100 || e.data === 101 || e.data === 150) {
-                    Android.onEmbedError();
-                  }
-                }
-              }
-            });
-          }
-        </script>
-        </body>
-        </html>
-    """.trimIndent()
+    // youtube-nocookie.com embed — daha az kısıtlama, aynı player
+    val embedUrl = "https://www.youtube-nocookie.com/embed/$videoId" +
+        "?autoplay=1&playsinline=1&rel=0&modestbranding=1&fs=0"
 
     AndroidView(
         modifier = modifier,
@@ -179,31 +136,47 @@ private fun InlineYouTubePlayer(
                     mediaPlaybackRequiresUserGesture = false
                     loadWithOverviewMode             = true
                     useWideViewPort                  = true
-                    cacheMode                        = WebSettings.LOAD_DEFAULT
+                    cacheMode                        = WebSettings.LOAD_NO_CACHE
                     mixedContentMode                 = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                    // Chrome UA — zorunlu, aksi hâlde YouTube blokluyor
+                    userAgentString =
+                        "Mozilla/5.0 (Linux; Android 12; Pixel 6) " +
+                        "AppleWebKit/537.36 (KHTML, like Gecko) " +
+                        "Chrome/124.0.6367.82 Mobile Safari/537.36"
                 }
-                addJavascriptInterface(object : Any() {
-                    @android.webkit.JavascriptInterface
-                    fun onEmbedError() { onError() }
-                }, "Android")
                 webChromeClient = WebChromeClient()
-                webViewClient   = object : WebViewClient() {
+                webViewClient = object : WebViewClient() {
                     override fun shouldOverrideUrlLoading(
-                        view: WebView, request: WebResourceRequest
+                        view: WebView,
+                        request: WebResourceRequest,
                     ): Boolean {
                         val url = request.url.toString()
-                        val isYt = url.contains("youtube.com") || url.contains("youtu.be") ||
-                                   url.contains("googlevideo.com") || url.contains("ytimg.com")
-                        return if (!isYt) {
+                        // embed izni yoksa "watch" URL'sine yönlendiriyor — yakala ve YouTube'a aç
+                        if (url.contains("youtube.com/watch") || url.contains("youtu.be/")) {
+                            onFallback()
+                            return true
+                        }
+                        val isMedia = url.contains("youtube") || url.contains("googlevideo") ||
+                                      url.contains("ytimg") || url.contains("google.com")
+                        return if (!isMedia) {
                             try { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
                             catch (_: Exception) {}
                             true
                         } else false
                     }
+
+                    override fun onReceivedHttpError(
+                        view: WebView,
+                        request: WebResourceRequest,
+                        errorResponse: WebResourceResponse,
+                    ) {
+                        // 403 = embed yasak → fallback
+                        if (request.isForMainFrame && errorResponse.statusCode == 403) {
+                            onFallback()
+                        }
+                    }
                 }
-                loadDataWithBaseURL(
-                    "https://www.youtube.com", html, "text/html", "utf-8", null
-                )
+                loadUrl(embedUrl)
             }
         },
     )
