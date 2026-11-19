@@ -322,17 +322,7 @@ fun FeedScreen(
             onSharedConsumed()            // aynı paylaşım tekrar işlenmesin
         }
     }
-    val uploading          by vm.uploading.collectAsState()
-    val uploadImageError   by vm.uploadImageError.collectAsState()
-
-    // Günlük resim limiti hata Toast'u
-    val feedContext = LocalContext.current
-    LaunchedEffect(uploadImageError) {
-        if (!uploadImageError.isNullOrBlank()) {
-            android.widget.Toast.makeText(feedContext, uploadImageError, android.widget.Toast.LENGTH_LONG).show()
-            vm.clearUploadImageError()
-        }
-    }
+    val uploading        by vm.uploading.collectAsState()
 
     // Photo Picker — izin gerektirmez (Android 13+ politikası)
     val imagePicker = rememberLauncherForActivityResult(
@@ -2037,19 +2027,6 @@ fun PostCard(
             else
                 Modifier.fillMaxWidth()
         ) {
-            if (post.quoteText.isNotBlank()) {
-                QuoteCard(
-                    quoteText       = post.quoteText,
-                    bookName        = post.bookName,
-                    authorName      = post.authorName,
-                    coverImg        = post.coverImg,
-                    language        = language,
-                    onTapBook       = onTapBook,
-                    onTapAuthor     = onTapAuthor,
-                    expandByDefault = isDetailScreen,
-                    modifier        = Modifier.padding(bottom = 8.dp),
-                )
-            }
             if (post.category.isNotBlank()) {
                 Surface(
                     color    = Primary.copy(alpha = 0.12f),
@@ -2073,6 +2050,19 @@ fun PostCard(
                     fontWeight = FontWeight.Bold,
                     lineHeight = 21.sp,
                     modifier   = Modifier.padding(bottom = 4.dp),
+                )
+            }
+            if (post.quoteText.isNotBlank()) {
+                QuoteCard(
+                    quoteText       = post.quoteText,
+                    bookName        = post.bookName,
+                    authorName      = post.authorName,
+                    coverImg        = post.coverImg,
+                    language        = language,
+                    onTapBook       = onTapBook,
+                    onTapAuthor     = onTapAuthor,
+                    expandByDefault = isDetailScreen,
+                    modifier        = Modifier.padding(bottom = 8.dp),
                 )
             }
             if (post.text.isNotBlank()) {
