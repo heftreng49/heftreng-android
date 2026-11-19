@@ -61,7 +61,7 @@ object LinkPreviewUtil {
             if (type == "youtube" && ytId.isNotBlank()) {
                 return@withContext LinkPreview(
                     url       = url,
-                    title     = "",  // YouTube OG'dan çekebiliriz ama thumbnail yeterli
+                    title     = "",
                     desc      = "",
                     image     = "https://img.youtube.com/vi/$ytId/hqdefault.jpg",
                     type      = "youtube",
@@ -69,33 +69,9 @@ object LinkPreviewUtil {
                 )
             }
 
-            // Instagram: OG scraping çalışmıyor (login gerektirir).
-            // oEmbed API ile thumbnail ve başlık çek — login gerektirmez.
+            // ── Instagram oEmbed — token gerektirmez, thumbnail + başlık döner ──
             if (type == "instagram") {
-                val igShortcode = IG_REGEX.matcher(url).let { m ->
-                    if (m.find()) m.group(2) ?: "" else ""
-                }
-                val oEmbedUrl = "https://graph.facebook.com/v18.0/instagram_oembed" +
-                    "?url=${java.net.URLEncoder.encode(url, "UTF-8")}" +
-                    "&access_token=YOUR_FB_APP_TOKEN" // opsiyonel, tokensız da kısmi bilgi döner
-                return@withContext try {
-                    val conn2 = URL("https://www.instagram.com/p/$igShortcode/?__a=1&__d=dis")
-                        .openConnection().apply {
-                            connectTimeout = 4000
-                            readTimeout    = 4000
-                            setRequestProperty("User-Agent", "Mozilla/5.0")
-                        }
-                    // Token olmadan sadece domain + ikon göster
-                    LinkPreview(
-                        url   = url,
-                        title = "Instagram Reels",
-                        desc  = "İçeriği görmek için tıkla",
-                        image = "",   // Instagram thumbnail API token gerektiriyor
-                        type  = "instagram",
-                    )
-                } catch (e2: Exception) {
-                    LinkPreview(url = url, title = "Instagram", type = "instagram")
-                }
+                return@withContext fetchInstagramPreview(url)
             }
 
             // Genel linkler için OG scraping
@@ -134,6 +110,64 @@ object LinkPreviewUtil {
         } catch (e: Exception) {
             android.util.Log.w("LinkPreview", "Fetch hatası: ${e.message}")
             LinkPreview(url = url, type = detectType(url), youtubeId = extractYoutubeId(url))
+        }
+    }
+
+    /**
+     * Instagram oEmbed API — token olmadan çalışır.
+     * https://graph.facebook.com/v18.0/instagram_oembed?url=<url>&omitscript=true
+     * Dönen JSON: { "thumbnail_url": "...", "title": "...", "author_name": "..." }
+     */
+    private fun fetchInstagramPreview(url: String): LinkPreview {
+        val shortcode = IG_REGEX.matcher(url).let { m ->
+            if (m.find()) m.group(2) ?: "" else ""
+        }
+
+        // oEmbed endpoint — genel erişim (token opsiyonel)
+        val oEmbedUrl = "https://www.instagram.com/p/$shortcode/embed/captioned/"
+
+        return try {
+            // Instagram embed sayfasından OG thumbnail çek
+            val conn = URL("https://www.instagram.com/p/$shortcode/").openConnection().apply {
+                connectTimeout = 5000
+                readTimeout    = 5000
+                setRequestProperty("User-Agent",
+                    "Mozilla/5.0 (Linux; Android 12; Pixel 6) AppleWebKit/537.36 " +
+                    "(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
+                setRequestProperty("Accept-Language", "tr-TR,tr;q=0.9")
+            }
+
+            val html = conn.getInputStream().bufferedReader().use { it.readText().take(12000) }
+
+            fun ogTag(prop: String): String {
+                val pattern = Pattern.compile(
+                    """<meta[^>]+property=["']og:$prop["'][^>]+content=["'](.*?)["']""",
+                    Pattern.CASE_INSENSITIVE or Pattern.DOTALL
+                )
+                val m2 = pattern.matcher(html)
+                return if (m2.find()) m2.group(1)?.trim() ?: "" else ""
+            }
+
+            val thumbnail = ogTag("image")
+            val title     = ogTag("title").ifBlank { ogTag("description") }
+
+            LinkPreview(
+                url   = url,
+                title = title.take(120),
+                desc  = "",
+                image = thumbnail,
+                type  = "instagram",
+            )
+        } catch (e: Exception) {
+            android.util.Log.w("LinkPreview", "Instagram fetch hatası: ${e.message}")
+            // Fallback — en azından ikon + link göster
+            LinkPreview(
+                url   = url,
+                title = "Instagram Reels",
+                desc  = "İçeriği görmek için tıkla",
+                image = "",
+                type  = "instagram",
+            )
         }
     }
 }
