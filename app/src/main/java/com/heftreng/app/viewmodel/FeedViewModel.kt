@@ -1349,7 +1349,7 @@ class FeedViewModel @Inject constructor(
                 _uploading.value = true
 
                 // ── Günlük resim limiti kontrolü (24 saatte max 6) ──────────
-                val dailyLimit = 6
+                val dailyLimit = 4
                 val oneDayAgo  = com.google.firebase.Timestamp(
                     System.currentTimeMillis() / 1000 - 86400, 0
                 )
