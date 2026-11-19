@@ -73,6 +73,9 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
 import com.heftreng.app.R
+import com.heftreng.app.util.KurdiTtsUtil
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 // -- Ana ekran ----------------------------------------------------------------
 @OptIn(ExperimentalMaterial3Api::class)
@@ -2722,6 +2725,43 @@ fun LessonScreen(
                                 if (voc.kp.isNotBlank()) {
                                     Spacer(Modifier.height(6.dp))
                                     Text("/${voc.kp}/", color = Muted, fontSize = 14.sp)
+                                }
+                                Spacer(Modifier.height(10.dp))
+                                // ── Sesli okuma butonu (gTTS) ────────────────
+                                val ttsScope   = rememberCoroutineScope()
+                                val ttsContext = androidx.compose.ui.platform.LocalContext.current
+                                var ttsLoading by remember(voc.ku) { mutableStateOf(false) }
+                                IconButton(
+                                    onClick  = {
+                                        if (!ttsLoading) {
+                                            ttsLoading = true
+                                            ttsScope.launch(Dispatchers.IO) {
+                                                KurdiTtsUtil.speak(ttsContext, voc.ku)
+                                                ttsLoading = false
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .size(52.dp)
+                                        .background(
+                                            if (ttsLoading) Muted.copy(alpha = 0.12f) else Primary.copy(alpha = 0.12f),
+                                            androidx.compose.foundation.shape.CircleShape,
+                                        ),
+                                ) {
+                                    if (ttsLoading) {
+                                        CircularProgressIndicator(
+                                            modifier    = Modifier.size(22.dp),
+                                            strokeWidth = 2.dp,
+                                            color       = Primary,
+                                        )
+                                    } else {
+                                        Icon(
+                                            imageVector        = Icons.Default.VolumeUp,
+                                            contentDescription = if (language == "ku") "Bilîze" else "Sesli oku",
+                                            tint               = Primary,
+                                            modifier           = Modifier.size(26.dp),
+                                        )
+                                    }
                                 }
                                 Spacer(Modifier.height(16.dp))
                                 HorizontalDivider(color = Divider)
