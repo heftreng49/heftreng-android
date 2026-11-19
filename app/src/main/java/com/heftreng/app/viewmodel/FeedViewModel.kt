@@ -205,6 +205,10 @@ class FeedViewModel @Inject constructor(
     private val _uploading = MutableStateFlow(false)
     val uploading = _uploading.asStateFlow()
 
+    private val _uploadImageError = MutableStateFlow<String?>(null)
+    val uploadImageError = _uploadImageError.asStateFlow()
+    fun clearUploadImageError() { _uploadImageError.value = null }
+
     private val _commentError = MutableStateFlow<String?>(null)
     val commentError = _commentError.asStateFlow()
 
@@ -1343,6 +1347,25 @@ class FeedViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 _uploading.value = true
+
+                // ── Günlük resim limiti kontrolü (24 saatte max 6) ──────────
+                val dailyLimit = 6
+                val oneDayAgo  = com.google.firebase.Timestamp(
+                    System.currentTimeMillis() / 1000 - 86400, 0
+                )
+                val recentImageCount = firestore.collection("posts")
+                    .whereEqualTo("uid", uid)
+                    .whereGreaterThan("createdAt", oneDayAgo)
+                    .get()
+                    .await()
+                    .documents
+                    .count { (it.getString("imageURL") ?: "").isNotBlank() }
+                if (recentImageCount >= dailyLimit) {
+                    _uploadImageError.value = "24 saatte en fazla $dailyLimit fotoğraf paylaşabilirsin."
+                    return@launch
+                }
+                // ────────────────────────────────────────────────────────────
+
                 val storage = com.google.firebase.storage.FirebaseStorage.getInstance()
                 val ref = storage.reference.child("posts/$uid/${System.currentTimeMillis()}.jpg")
                 ref.putFile(imageUri).await()

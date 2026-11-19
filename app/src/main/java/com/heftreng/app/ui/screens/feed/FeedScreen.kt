@@ -322,7 +322,17 @@ fun FeedScreen(
             onSharedConsumed()            // aynı paylaşım tekrar işlenmesin
         }
     }
-    val uploading        by vm.uploading.collectAsState()
+    val uploading          by vm.uploading.collectAsState()
+    val uploadImageError   by vm.uploadImageError.collectAsState()
+
+    // Günlük resim limiti hata Toast'u
+    val feedContext = LocalContext.current
+    LaunchedEffect(uploadImageError) {
+        if (!uploadImageError.isNullOrBlank()) {
+            android.widget.Toast.makeText(feedContext, uploadImageError, android.widget.Toast.LENGTH_LONG).show()
+            vm.clearUploadImageError()
+        }
+    }
 
     // Photo Picker — izin gerektirmez (Android 13+ politikası)
     val imagePicker = rememberLauncherForActivityResult(
