@@ -1366,14 +1366,74 @@ class FeedViewModel @Inject constructor(
                 }
                 // ────────────────────────────────────────────────────────────
 
+                // ── Resmi sıkıştır — max 1080px, JPEG %80 ───────────────────
+                val compressedUri = compressImage(context, imageUri)
+                // ────────────────────────────────────────────────────────────
+
                 val storage = com.google.firebase.storage.FirebaseStorage.getInstance()
                 val ref = storage.reference.child("posts/$uid/${System.currentTimeMillis()}.jpg")
-                ref.putFile(imageUri).await()
+                ref.putFile(compressedUri).await()
                 val url = ref.downloadUrl.await().toString()
                 createPost(text = text, title = title, category = category, imageURL = url, quoteText = quoteText, authorName = authorName, bookName = bookName, coverImg = coverImg, type = if (quoteText.isNotBlank()) "library_quote" else "")
             } catch (e: Exception) { e.printStackTrace() }
             finally { _uploading.value = false }
         }
+    }
+
+    /**
+     * Verilen Uri'yi sıkıştırarak geçici bir dosyaya yazar ve yeni Uri'yi döndürür.
+     * - Uzun kenar en fazla MAX_SIZE px'e küçültülür (oran korunur)
+     * - JPEG kalitesi JPEG_QUALITY ile sıkıştırılır
+     * - Orijinal dosyaya dokunulmaz; uygulama cache dizininde temp dosya oluşturulur
+     */
+    private suspend fun compressImage(
+        context : android.content.Context,
+        uri     : android.net.Uri,
+    ): android.net.Uri = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val MAX_SIZE    = 1080
+        val JPEG_QUALITY = 80
+
+        val inputStream = context.contentResolver.openInputStream(uri)
+            ?: return@withContext uri          // açılamazsa orijinali kullan
+
+        // Önce boyutları oku (belleğe almadan)
+        val opts = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        android.graphics.BitmapFactory.decodeStream(inputStream, null, opts)
+        inputStream.close()
+
+        val (origW, origH) = opts.outWidth to opts.outHeight
+        if (origW <= 0 || origH <= 0) return@withContext uri   // decode başarısız
+
+        // inSampleSize — belleği korumak için 2'nin kuvveti örnekleme
+        var sampleSize = 1
+        var w = origW; var h = origH
+        while (w / 2 >= MAX_SIZE * 2 && h / 2 >= MAX_SIZE * 2) {
+            sampleSize *= 2; w /= 2; h /= 2
+        }
+
+        val opts2 = android.graphics.BitmapFactory.Options().apply { inSampleSize = sampleSize }
+        val raw = context.contentResolver.openInputStream(uri)?.use {
+            android.graphics.BitmapFactory.decodeStream(it, null, opts2)
+        } ?: return@withContext uri
+
+        // Hedef boyutu hesapla
+        val scale = MAX_SIZE.toFloat() / maxOf(raw.width, raw.height)
+        val bitmap = if (scale < 1f) {
+            val tw = (raw.width  * scale).toInt().coerceAtLeast(1)
+            val th = (raw.height * scale).toInt().coerceAtLeast(1)
+            val scaled = android.graphics.Bitmap.createScaledBitmap(raw, tw, th, true)
+            if (scaled !== raw) raw.recycle()
+            scaled
+        } else raw
+
+        // Geçici dosyaya yaz
+        val outFile = java.io.File(context.cacheDir, "heft_img_${System.currentTimeMillis()}.jpg")
+        outFile.outputStream().use { out ->
+            bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)
+        }
+        bitmap.recycle()
+
+        android.net.Uri.fromFile(outFile)
     }
 
     private val _createPostError = MutableStateFlow<String?>(null)
